@@ -1,0 +1,92 @@
+# Welcome to Serverless!
+#
+# This file is the main config file for your service.
+# It's very minimal at this point and uses default values.
+# You can always add more config options for more control.
+# We've included some commented out config examples here.
+# Just uncomment any of them to get that config option.
+#
+# For full config options, check the docs:
+#    docs.serverless.com
+#
+# Happy Coding!
+
+service: wsauth0
+# app and org for use with dashboard.serverless.com
+#app: your-app-name
+#org: your-org-name
+
+# You can pin your service to only deploy with a specific Serverless version
+# Check out our docs for more details
+# frameworkVersion: "=X.X.X"
+
+provider:
+  name: aws
+  runtime: python3.8
+  region: ap-northeast-1
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:PutItem"
+        - "dynamodb:DeleteItem"
+        - "dynamodb:Scan"
+      Resource:
+        Fn::Join:
+          - ""
+          - - "arn:aws:dynamodb:*:*:table/"
+            - "Ref": "ConnectionsDDBTable"
+  websocketsApiRouteSelectionExpression: $request.body.action
+  environment:
+    AUTH0_AUDIENCE: YOURWSSENDPOINT
+    AUTH0_JWKS_URL: https://xxxx.auth0.com/.well-known/jwks.json
+    CONNECTIONS_TABLE_NAME: {Ref: ConnectionsDDBTable}
+
+custom:
+  pythonRequirements:
+    dockerizePip: true
+
+functions:
+  # カスタムオーソライザー
+  auth:
+    handler: handler.auth.auth_handler
+
+  connectHandler:
+    handler: handler.handler.connect_handler
+    events:
+      - websocket:
+          route: $connect
+          authorizer:
+            name: auth
+            identitySource:
+              - 'route.request.querystring.token'
+
+  disconnectHandler:
+    handler: handler.handler.disconnect_handler
+    events:
+      - websocket: $disconnect
+
+  sendMessageHandler:
+    handler: handler.handler.send_message_handler
+    events:
+      - websocket: sendMessage
+
+plugins:
+  - serverless-python-requirements
+
+
+resources:
+  Resources:
+    ConnectionsDDBTable:
+      Type: 'AWS::DynamoDB::Table'
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: connection_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: connection_id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+  Outputs:
+    ConnectionsDDBTableName:
+      Value: {Ref: ConnectionsDDBTable}
